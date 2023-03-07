@@ -21,6 +21,41 @@ MAP = {'hdp_uid':'citation.heal_platform_persistent_ID',
        'clinicaltrials_gov.OverallStatus':'data_availability.data_collection_status',
        'clinicaltrials_gov.EnrollmentCount':'data.subject_data_unit_of_collection_expected_number'}
 
+RECODES = {'study_type.study_stage':
+               {'Buisness Development':'Business Development'},
+           'data_availability.data_collection_status':
+               {'Not yet recruiting':'not started',
+                'Active, not recruiting':'started',
+                'Enrolling by invitation':'started',
+                'Recruiting':'started',
+                'Completed':'finished'},
+           'study_translational_focus.study_translational_focus':
+               {'Treatment':'Treatment of a Condition'},
+           'study_type.study_type_design':
+               {'Parallel Assignment':'Randomized Control Trial',
+                'Sequential Assignment':'Randomized Control Trial',
+                'Factorial Assignment':'Randomized Control Trial'},
+           'human_subject_applicability.sexual_identity_applicability':
+               {'Homosexual':'Homosexual (gay/lesbian)',
+                'Homosexual (gay/lesbian) (gay/lesbian)':'Homosexual (gay/lesbian)',
+                'Pansexual':'Other',
+                'Queer':'Other'},
+           'human_subject_applicability.gender_applicability':
+               {'Gender Queer':'Other',
+                'Agender, Non-binary, gender non-conforming':'Other',
+                'Trans Male':'Female-to-male transsexual',
+                'Trans Female':'Male-to-female transsexual',
+                'Intersex':'Intersexed',
+                'Cis Female':'Female',
+                'Cis Male':'Male'},
+           'data_availability.produce_data':{'Yes':True, 'No':False},
+           'data_availability.produce_other':{'Yes':True, 'No':False},
+           'human_subject_applicability.geographic_applicability':
+               {'US - Specific counties':'US - Specific Counties',
+                'Non-US':'Non US',
+                'US - Specific states':'US - Specific States'}
+           }
+
 # TODO: Modules citation, contacts and registrants, and findings not included
 #       in CEDAR template
 MISSING = {'citation': {'heal_funded_status':None,
@@ -93,6 +128,23 @@ def _add_contacts(obj):
     py_.set(obj, 'contacts_and_registrants.contacts', contact_info)
     return obj
 
+def _recode_items(obj):
+    """Recode individual items based on RECODES"""
+
+    def recode(rules, s, *args):
+        for old, new in rules.items():
+            if s==old:
+                return new
+        return s
+
+    for path, rules in RECODES.items():
+        sub_obj = py_.get(obj, path)
+        new_obj = (py_.map_(sub_obj, py_.partial(recode, rules)) if
+                   isinstance(sub_obj, list) else recode(rules, sub_obj))
+        py_.set(obj, path, new_obj)
+
+    return obj
+
 def _remove_empties(dictionary):
     """Delete '' or None recursively from dictionary"""
     d = {}
@@ -122,71 +174,16 @@ def _to_heal_slmd(slmd, prune=False):
                 lambda v: int(v) if v else None)
         .update('data.subject_data_unit_of_analysis_expected_number',
                 lambda v: int(v) if v else None)
-        # Clean up values
-        .update('study_type.study_stage',
-                lambda v: [s.replace('Buisness Development', 'Business Development') for s in v])
-        .update('data_availability.data_collection_status',
-               lambda v: 'not started' if v=='Not yet recruiting' else v)
-        .update('data_availability.data_collection_status',
-               lambda v: 'started' if v=='Recruiting' else v)
-        .update('data_availability.data_collection_status',
-               lambda v: 'started' if v=='Enrolling by invitation' else v)
-        .update('data_availability.data_collection_status',
-               lambda v: 'started' if v=='Active, not recruiting' else v)
-        .update('data_availability.data_collection_status',
-               lambda v: 'finished' if v=='Completed' else v)
-        .update('study_translational_focus.study_translational_focus',
-               lambda v: 'Treatment of a Condition' if v=='Treatment' else v)
+        .thru(_recode_items)
+        # A few final miscellaneous cleanups
+        .update('metadata_location.nih_reporter_link',
+               lambda v: v.replace('"','') if v else None)
         .update('study_type.study_type_design',
                lambda v: [s.replace('–', '-') for s in v])
-        .update('study_type.study_type_design',
-               lambda v: [s.replace('Parallel Assignment','Randomized Control Trial') for s in v])
-        .update('study_type.study_type_design',
-               lambda v: [s.replace('Sequential Assignment','Randomized Control Trial') for s in v])
-        .update('study_type.study_type_design',
-               lambda v: [s.replace('Factorial Assignment','Randomized Control Trial') for s in v])
-        .update('human_subject_applicability.sexual_identity_applicability',
-               lambda v: [s.replace('Homosexual', 'Homosexual (gay/lesbian)') for s in v])
-        .update('human_subject_applicability.sexual_identity_applicability',
-               lambda v: [s.replace('Homosexual (gay/lesbian) (gay/lesbian)', 'Homosexual (gay/lesbian)') for s in v])
-        .update('human_subject_applicability.sexual_identity_applicability',
-               lambda v: [s.replace('Pansexual', 'Other') for s in v])
-        .update('human_subject_applicability.sexual_identity_applicability',
-               lambda v: [s.replace('Queer', 'Other') for s in v])
         .update('human_subject_applicability.sexual_identity_applicability',
                lambda v: [] if v==['Not applicable'] else v)
         .update('human_subject_applicability.gender_applicability',
-               lambda v: [s.replace('Gender Queer', 'Other') for s in v])
-        .update('human_subject_applicability.gender_applicability',
-               lambda v: [s.replace('Agender, Non-binary, gender non-conforming', 'Other') for s in v])
-        .update('human_subject_applicability.gender_applicability',
-               lambda v: [s.replace('Trans Male', 'Female-to-male transsexual') for s in v])
-        .update('human_subject_applicability.gender_applicability',
-               lambda v: [s.replace('Trans Female', 'Male-to-female transsexual') for s in v])
-        .update('human_subject_applicability.gender_applicability',
                lambda v: [] if v==['Not applicable'] else v)
-        .update('human_subject_applicability.gender_applicability',
-               lambda v: ['Intersexed' if s=='Intersex' else s for s in v])
-        .update('human_subject_applicability.gender_applicability',
-               lambda v: [s.replace('Cis Female', 'Other') for s in v])
-        .update('human_subject_applicability.gender_applicability',
-               lambda v: [s.replace('Cis Male', 'Other') for s in v])
-        .update('metadata_location.nih_reporter_link',
-               lambda v: v.replace('"','') if isinstance(v, str) else v)
-        .update('data_availability.produce_data',
-               lambda v: True if v=='Yes' else v)
-        .update('data_availability.produce_data',
-               lambda v: False if v=='No' else v)
-        .update('data_availability.produce_other',
-               lambda v: True if v=='Yes' else v)
-        .update('data_availability.produce_other',
-               lambda v: False if v=='No' else v)
-        .update('human_subject_applicability.geographic_applicability',
-               lambda v: [s.replace('US - Specific counties', 'US - Specific Counties') for s in v])
-        .update('human_subject_applicability.geographic_applicability',
-               lambda v: [s.replace('Non-US', 'Non US') for s in v])
-        .update('human_subject_applicability.geographic_applicability',
-               lambda v: [s.replace('US - Specific states', 'US - Specific States') for s in v])
     ).value()
 
     if prune:
