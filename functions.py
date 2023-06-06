@@ -179,7 +179,7 @@ def _to_heal_slmd(slmd, prune=False):
         .update('metadata_location.nih_reporter_link',
                lambda v: v.replace('"','') if v else None)
         .update('study_type.study_type_design',
-               lambda v: [s.replace('–', '-') for s in v])
+               lambda v: [s.replace('–', '-') for s in v] if v else [])
         .update('human_subject_applicability.sexual_identity_applicability',
                lambda v: [] if v==['Not applicable'] else v)
         .update('human_subject_applicability.gender_applicability',
