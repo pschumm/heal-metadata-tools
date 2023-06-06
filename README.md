@@ -2,7 +2,7 @@
 
 This repository contains the following:
 
-1. A [function](https://github.com/pschumm/heal-metadata-tools/blob/f9928b15ad939e0397846082c127183d8f216c72/functions.py#L106)
+1. A [function](https://github.com/pschumm/heal-metadata-tools/blob/f6e75e13a3c3471ffb7eaa05699194fee3dd846a/functions.py#L158)
    to translate from an MDS record in the HEAL Platform to a SLMD instance in JSON format that conforms to the HEAL SLMD
    schema.
 
