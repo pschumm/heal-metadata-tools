@@ -6,20 +6,20 @@ from jsonschema import validate
 MDS_ENDPOINT = 'https://healdata.org/mds/metadata'
 SLMD_SCHEMA = 'https://github.com/HEAL/heal-metadata-schemas/raw/133621a0d859a9c92c7f36eb47477cb1fa414468/study-level-metadata-schema/schema-clean/json/study-metadata-schema.json'
 
-MAP = {'hdp_uid':'citation.heal_platform_persistent_ID',
-       'project_title':'minimal_info.study_name',
-       'study_description_summary':'minimal_info.study_description',
+MAP = {'gen3_discovery.study_metadata.data':'data',
+       'gen3_discovery.study_metadata.human_subject_applicability':'human_subject_applicability',
+       'gen3_discovery.study_metadata.human_condition_applicability':'human_condition_applicability',
+       'gen3_discovery.study_metadata.human_treatment_applicability':'human_treatment_applicability',
+       'gen3_discovery.study_metadata.study_type':'study_type',
+       'gen3_discovery.study_metadata.study_translational_focus':'study_translational_focus',
+       'gen3_discovery.study_metadata.data_availability':'data_availability',
+       'gen3_discovery.study_metadata.metadata_location':'metadata_location',
+       'gen3_discovery.study_metadata.citation':'citation',
+       '_hdp_uid':'citation.heal_platform_persistent_ID',
+       'gen3_discovery.project_title':'minimal_info.study_name',
+       'gen3_discovery.study_description_summary':'minimal_info.study_description',
        'clinicaltrials_gov.OfficialTitle':'minimal_info.alternative_study_name',
-       'clinicaltrials_gov.DetailedDescription':'minimal_info.alternative_study_description',
-       'appl_id':'metadata_location.nih_application_id',
-       'project_detail_url':'metadata_location.nih_reporter_link',
-       'cedar_instance_id':'metadata_location.cedar_study_level_metadata_template_instance_ID',
-       'clinical_trials_id':'metadata_location.clinical_trials_study_ID',
-       'clinicaltrials_gov.CompletionDate':'data_availability.data_collection_finish_date',
-       'clinicaltrials_gov.IPDSharingTimeFrame':'data_availability.data_release_start_date',
-       'clinicaltrials_gov.StartDate':'data_availability.data_collection_start_date',
-       'clinicaltrials_gov.OverallStatus':'data_availability.data_collection_status',
-       'clinicaltrials_gov.EnrollmentCount':'data.subject_data_unit_of_collection_expected_number'}
+       'clinicaltrials_gov.DetailedDescription':'minimal_info.alternative_study_description'}
 
 RECODES = {'study_type.study_stage':
                {'Buisness Development':'Business Development'},
@@ -56,15 +56,8 @@ RECODES = {'study_type.study_stage':
                 'US - Specific states':'US - Specific States'}
            }
 
-# TODO: Modules citation, contacts and registrants, and findings not included
-#       in CEDAR template
-MISSING = {'citation': {'heal_funded_status':None,
-                        'study_collection_status':None,
-                        'study_collections':[],
-                        'funding':[],
-                        'investigators':[],
-                        'heal_platform_citation':None},
-           'findings': {'primary_publications':[],
+# TODO: Shouldn't need this anymore
+MISSING = {'findings': {'primary_publications':[],
                         'primary_study_findings':[],
                         'secondary_publications':[]}}
 
@@ -114,7 +107,12 @@ def _add_contacts(obj):
     """Add information on contact person(s)"""
 
     # TODO Complete once required information available
-    name = py_.get(obj, 'contact_pi_name').replace(',',' ').split()
+
+    # N.B. Some records don't include info from NIH RePORTER
+    try:
+        name = py_.get(obj, 'nih_reporter.contact_pi_name').replace(',',' ').split()
+    except AttributeError:
+        name = ''
     if len(name) > 2:
         contact_info = [{'contact_first_name':name[1],
                          'contact_middle_initial':name[2],
@@ -162,6 +160,8 @@ def _to_heal_slmd(slmd, prune=False):
     """
     heal_slmd = (py_(slmd)
         .map_keys(lambda v, k: py_.snake_case(k))
+        # Fix byproduct of snake_case() above
+        .rename_keys({'gen_3_discovery':'gen3_discovery'})
         .thru(_remap_items)
         .thru(_add_registrants)
         .thru(_add_repo_info)
@@ -184,6 +184,8 @@ def _to_heal_slmd(slmd, prune=False):
                lambda v: [] if v==['Not applicable'] else v)
         .update('human_subject_applicability.gender_applicability',
                lambda v: [] if v==['Not applicable'] else v)
+        .update('metadata_location.nih_application_id',
+               lambda v: str(v))
     ).value()
 
     if prune:
@@ -208,16 +210,15 @@ def _to_heal_slmd(slmd, prune=False):
 
     return heal_slmd
 
-def get_slmd(registered_only=True):
+def get_slmd():
     """Fetch study level metadata"""
-    guid_type = 'discovery_metadata' if registered_only else ''
     dfs = []
-    for page in _get_records(guid_type):
+    for page in _get_records('discovery_metadata'):
         for study in page:
-            slmd = page[study]['gen3_discovery']
+            slmd = page[study]
             heal_slmd = _to_heal_slmd(slmd)
             df = pd.json_normalize(heal_slmd).rename(index={0:study})
-            dfs.append(df)
+            dfs.append(df.dropna(axis=1))
 
     return pd.concat(dfs)
 
