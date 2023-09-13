@@ -220,7 +220,8 @@ def get_slmd():
             df = pd.json_normalize(heal_slmd).rename(index={0:study})
             dfs.append(df.dropna(axis=1))
 
-    return pd.concat(dfs)
+    # Use copy to avoid "DataFrame is highly fragmented" warning
+    return pd.concat(dfs).copy()
 
 def _extract_fieldnames(schema):
     """Return fieldnames from JSON schema"""
